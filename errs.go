@@ -28,28 +28,54 @@ func Pair(first, second error) error {
 	return &errpair{first, second}
 }
 
+// Unpack an error into two other errors. Second return value
+// will be nil if there is nothing to unpack.
+func Unpack(err error) (error, error) {
+	if err != nil {
+		return nil, nil
+	}
+	switch e := err.(type) {
+	case *basicError:
+		return e, nil
+	case *errpair:
+		return e.first, e.second
+	case *errlist:
+		var second error
+		switch len(e.errs) {
+		case 0:
+			return nil, nil
+		case 1:
+			second = nil
+		case 2:
+			second = e.errs[1]
+		default:
+			second = &errlist{e.errs[1:]}
+		}
+		if e.errs[0] == nil {
+			return second, nil
+		}
+		return e.errs[0], second
+	default:
+		return err, nil
+	}
+}
+
 // Chain will chain a list of errors together
 func Chain(es ...error) error {
-	var errors []error
-	switch l := len(es); l {
-	case 0:
-		return nil
-	case 1:
-		if es[0] != nil {
-			return es[0]
-		}
-		return nil
-	default:
-		errors = make([]error, 0, l)
-	}
-
+	errors := make([]error, 0, len(es))
 	for _, e := range es {
 		if e != nil {
 			errors = append(errors, e)
 		}
 	}
-	if len(errors) == 0 {
+
+	switch len(errors) {
+	case 0:
 		return nil
+	case 1:
+		return errors[0]
+	case 2:
+		return Pair(errors[0], errors[1])
 	}
 	return &errlist{errors}
 }
